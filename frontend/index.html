@@ -1,0 +1,219 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>🏡 Property Value Estimator</title>
+  <meta charset="UTF-8" />
+  <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;600&display=swap" rel="stylesheet">
+  <style>
+    body {
+      font-family: 'Poppins', sans-serif;
+      background: linear-gradient(135deg, #cce3f4, #f9f9f9);
+      display: flex;
+      justify-content: center;
+      align-items: flex-start;
+      padding-top: 50px;
+      min-height: 100vh;
+    }
+    .container {
+      background: white;
+      padding: 30px 40px;
+      border-radius: 16px;
+      box-shadow: 0 12px 40px rgba(0,0,0,0.1);
+      max-width: 450px;
+      width: 100%;
+      transition: all 0.3s ease;
+    }
+    h1 {
+      text-align: center;
+      font-size: 24px;
+      margin-bottom: 20px;
+    }
+    label {
+      display: block;
+      margin-top: 15px;
+      font-weight: 600;
+    }
+    input {
+      width: 100%;
+      padding: 10px;
+      margin-top: 5px;
+      border-radius: 8px;
+      border: 1px solid #ccc;
+      font-size: 15px;
+    }
+    button {
+      margin-top: 25px;
+      width: 100%;
+      padding: 12px;
+      background: #3f51b5;
+      color: white;
+      border: none;
+      border-radius: 8px;
+      font-size: 16px;
+      cursor: pointer;
+      transition: background 0.2s ease;
+    }
+    button:disabled {
+      background: #aaa;
+      cursor: not-allowed;
+    }
+    button:hover:enabled {
+      background: #303f9f;
+    }
+    #result {
+      margin-top: 25px;
+      padding: 20px;
+      background: #f2f8ff;
+      border: 1px solid #cde0f5;
+      border-radius: 12px;
+      font-size: 18px;
+      font-weight: bold;
+      text-align: center;
+      display: none;
+      animation: fadeIn 0.6s ease forwards;
+    }
+    #spinner {
+      margin-top: 20px;
+      text-align: center;
+      display: none;
+    }
+    #clear {
+      background: #f44336;
+      margin-top: 10px;
+    }
+    @keyframes fadeIn {
+      from { opacity: 0; transform: translateY(10px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>🏡 Property Value Estimator</h1>
+
+    <label>Gr Liv Area (sq ft):</label>
+    <input type="number" id="Gr Liv Area" />
+
+    <label>Bedroom AbvGr:</label>
+    <input type="number" id="Bedroom AbvGr" />
+
+    <label>Full Bath:</label>
+    <input type="number" id="Full Bath" />
+
+    <label>Year Built:</label>
+    <input type="number" id="Year Built" />
+
+    <label>Garage Cars:</label>
+    <input type="number" id="Garage Cars" />
+
+    <label>Lot Area (sq ft):</label>
+    <input type="number" id="Lot Area" />
+
+    <button id="estimateBtn" onclick="estimate()" disabled>Estimate Value</button>
+    <button id="clear" onclick="clearForm()">Clear</button>
+
+    <div id="spinner">Estimating...</div>
+    <div id="result"></div>
+    <h2 style="margin-top: 40px; font-size: 18px;">📋 Estimate History</h2>
+    <div id="history" style="margin-top: 10px; font-size: 14px; color: #333;"></div>
+
+  </div>
+
+  <script>
+    const inputs = document.querySelectorAll("input");
+    const estimateBtn = document.getElementById("estimateBtn");
+    const resultDiv = document.getElementById("result");
+    const spinner = document.getElementById("spinner");
+
+    function validateForm() {
+      let filled = true;
+      inputs.forEach(input => {
+        if (!input.value || input.value <= 0) filled = false;
+      });
+      estimateBtn.disabled = !filled;
+    }
+
+    inputs.forEach(input => input.addEventListener("input", validateForm));
+
+    function clearForm() {
+      inputs.forEach(input => input.value = '');
+      resultDiv.style.display = "none";
+      spinner.style.display = "none";
+      estimateBtn.disabled = true;
+    }
+
+    async function estimate() {
+      const data = {
+        "Gr Liv Area": +document.getElementById("Gr Liv Area").value,
+        "Bedroom AbvGr": +document.getElementById("Bedroom AbvGr").value,
+        "Full Bath": +document.getElementById("Full Bath").value,
+        "Year Built": +document.getElementById("Year Built").value,
+        "Garage Cars": +document.getElementById("Garage Cars").value,
+        "Lot Area": +document.getElementById("Lot Area").value
+      };
+
+      spinner.style.display = "block";
+      resultDiv.style.display = "none";
+
+      try {
+        const res = await fetch("http://127.0.0.1:5000/predict", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json"
+          },
+          body: JSON.stringify(data)
+        });
+
+        const result = await res.json();
+        spinner.style.display = "none";
+
+        if (result.estimated_price) {
+          const price = parseFloat(result.estimated_price.replace(/[^0-9.]/g, ''));
+          const low = price * 0.95;
+          const high = price * 1.05;
+          resultDiv.innerHTML = `
+            Estimated Value: <br>
+            <strong>${result.estimated_price}</strong> <br>
+            <span style="font-size: 14px; font-weight: 400; color: #555">
+              Range: $${low.toLocaleString(undefined, {minimumFractionDigits: 2})}
+              – $${high.toLocaleString(undefined, {minimumFractionDigits: 2})}
+            </span>`;
+        } else {
+          resultDiv.innerText = "Something went wrong.";
+        }
+
+        resultDiv.style.display = "block";
+        addToHistory(data, result.estimated_price);
+      } catch (err) {
+        spinner.style.display = "none";
+        resultDiv.innerText = "Error connecting to API.";
+        resultDiv.style.display = "block";
+      }
+    }
+
+    function addToHistory(inputs, result) {
+    const history = document.getElementById("history");
+    const entry = document.createElement("div");
+    entry.style.padding = "10px";
+    entry.style.marginBottom = "10px";
+    entry.style.border = "1px solid #ddd";
+    entry.style.borderRadius = "8px";
+    entry.style.background = "#f9f9f9";
+
+    entry.innerHTML = `
+        <div><strong>Estimated:</strong> ${result}</div>
+        <div style="font-size: 13px; color: #555;">
+        GrLivArea: ${inputs["Gr Liv Area"]}, 
+        Beds: ${inputs["Bedroom AbvGr"]}, 
+        Baths: ${inputs["Full Bath"]}, 
+        Year: ${inputs["Year Built"]}, 
+        Garage: ${inputs["Garage Cars"]}, 
+        LotArea: ${inputs["Lot Area"]}
+        </div>
+    `;
+    history.prepend(entry); // newest at top
+    }
+
+  </script>
+</body>
+</html>
